@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Brücken & Beben – Web-App & Editor</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: rgba(30, 41, 59, 0.92);
+            --accent: #f59e0b;
+            --danger: #ef4444;
+            --success: #10b981;
+            --blue: #3b82f6;
+            --text: #f8fafc;
+        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg-dark); color: var(--text); touch-action: none; }
+        
+        #app { position: relative; width: 100vw; height: 100vh; }
+        canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+        .top-bar {
+            position: absolute; top: 12px; left: 12px; right: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px; pointer-events: none; z-index: 10;
+        }
+        .hud-card {
+            background: var(--panel-bg); backdrop-filter: blur(10px);
+            padding: 10px 16px; border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            pointer-events: auto; display: flex; align-items: center; gap: 14px;
+        }
+        .stat-box { display: flex; flex-direction: column; }
+        .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; }
+        .stat-value { font-size: 17px; font-weight: 800; color: #fff; }
+        .stat-value.ok { color: var(--success); }
+        .stat-value.warn { color: var(--accent); }
+        .stat-value.over { color: var(--danger); }
+
+        select {
+            background: #334155; color: white; border: 1px solid #475569;
+            padding: 7px 10px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+        }
+
+        #briefing-box {
+            position: absolute; top: 76px; left: 12px; max-width: 380px;
+            background: var(--panel-bg); padding: 12px 16px; border-radius: 12px;
+            border-left: 4px solid var(--accent); pointer-events: auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: 13px; line-height: 1.4;
+            z-index: 9;
+        }
+        #briefing-box strong { color: var(--accent); display: block; margin-bottom: 3px; font-size: 14px; }
+        .highscore-tag {
+            display: inline-block; margin-top: 6px; padding: 3px 8px;
+            background: rgba(16, 185, 129, 0.15); color: #34d399;
+            border-radius: 6px; font-size: 11px; font-weight: 700;
+        }
+
+        .bottom-bar {
+            position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 8px; background: var(--panel-bg);
+            padding: 8px 12px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.14);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.55); align-items: center;
+            max-width: 96vw; overflow-x: auto; z-index: 10;
+        }
+        .tool-btn {
+            background: #1e293b; border: 2px solid transparent; color: white;
+            padding: 8px 11px; border-radius: 11px; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            min-width: 82px; transition: all 0.15s ease; flex-shrink: 0;
+        }
+        .tool-btn:hover { background: #334155; }
+        .tool-btn.active { border-color: var(--accent); background: rgba(245, 158, 11, 0.2); }
+        .tool-btn.eraser.active { border-color: var(--danger); background: rgba(239, 68, 68, 0.25); }
+        .tool-name { font-weight: 700; font-size: 12px; }
+        .tool-cost { font-size: 10px; color: #cbd5e1; }
+        .mat-preview { width: 32px; height: 7px; border-radius: 4px; margin-bottom: 2px; }
+
+        .action-btn {
+            padding: 10px 16px; border-radius: 11px; font-weight: 800; font-size: 13px;
+            border: none; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+            white-space: nowrap; color: white;
+        }
+        .btn-test { background: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); }
+        .btn-xray { background: #3b82f6; }
+        .btn-xray.active { background: #1d4ed8; box-shadow: 0 0 14px #3b82f6; }
+        .btn-editor { background: #8b5cf6; }
+        .btn-editor.active { background: #6d28d9; box-shadow: 0 0 14px #8b5cf6; }
+        .btn-util { background: #475569; padding: 9px 12px; font-size: 12px; }
+
+        #result-modal {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+            background: var(--panel-bg); padding: 26px 32px; border-radius: 20px;
+            text-align: center; border: 2px solid rgba(255,255,255,0.15);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.75); display: none; z-index: 30;
+            min-width: 310px; max-width: 90vw; backdrop-filter: blur(14px);
+        }
+        #result-modal.show { display: block; animation: popIn 0.25s forwards; }
+        @keyframes popIn { to { transform: translate(-50%, -50%) scale(1); } }
+        .modal-title { font-size: 24px; font-weight: 900; margin-bottom: 8px; }
+        .modal-sub { color: #cbd5e1; margin-bottom: 18px; font-size: 14px; line-height: 1.4; }
+
+        @media (max-width: 768px) {
+            #briefing-box { max-width: 260px; font-size: 11.5px; padding: 9px 12px; top: 118px; }
+            .stat-value { font-size: 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="top-bar">
+        <div class="hud-card">
+            <div>
+                <div class="stat-label" id="modeLabel">Mission</div>
+                <select id="levelSelect" onchange="loadLevel(parseInt(this.value))">
+                    <option value="0">1. Die Schlucht-Villa (Erdbeben)</option>
+                    <option value="1">2. Der Sky-High-Turm (Orkan)</option>
+                    <option value="2">3. Das Mega-Beben (Beides)</option>
+                </select>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Budget</span>
+                <span class="stat-value ok" id="budgetDisplay">0 $ / 2.800 $</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Stress</span>
+                <span class="stat-value" id="stressDisplay">0 %</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Zeit</span>
+                <span class="stat-value" id="timerDisplay">12.0s</span>
+            </div>
+        </div>
+
+        <div class="hud-card">
+            <button class="action-btn btn-xray" id="xrayBtn" onclick="toggleXray()">🔍 Röntgen</button>
+            <button class="action-btn btn-editor" id="editorBtn" onclick="toggleEditorMode()">🛠️ Editor</button>
+            <button class="action-btn btn-util" onclick="undoLast()">↩️</button>
+            <button class="action-btn btn-util" onclick="resetBuild()">🗑️</button>
+        </div>
+    </div>
+
+    <div id="briefing-box">
+        <strong id="briefingTitle">Mission #1: Die Schlucht-Villa</strong>
+        <span id="briefingText">Baue ein stabiles Fachwerk zu den Fundamenten!</span>
+        <div id="highscoreDisplay" class="highscore-tag">🏆 Bestwert: Noch ungelöst</div>
+    </div>
+
+    <div id="result-modal">
+        <div class="modal-title" id="modalTitle">BAUWERK HÄLT!</div>
+        <div class="modal-sub" id="modalSub">Du hast das Beben überstanden!</div>
+        <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+            <button class="action-btn btn-util" onclick="stopSimulation()">🔧 Umbauen</button>
+            <button class="action-btn btn-editor" onclick="shareCustomLevel()">🔗 Level-Link kopieren</button>
+            <button class="action-btn btn-test" onclick="nextLevel()">➡️ Nächstes</button>
+        </div>
+    </div>
+
+    <!-- Bottom Toolbar -->
+    <div class="bottom-bar" id="toolBar">
+        <button class="tool-btn active" onclick="selectTool('wood')" id="tool-wood">
+            <div class="mat-preview" style="background: #d97706;"></div>
+            <span class="tool-name">Rundholz</span><span class="tool-cost">100$</span>
+        </button>
+        <button class="tool-btn" onclick="selectTool('steel')" id="tool-steel">
+            <div class="mat-preview" style="background: #dc2626;"></div>
+            <span class="tool-name">Stahl</span><span class="tool-cost">250$</span>
+        </button>
+        <button class="tool-btn" onclick="selectTool('concrete')" id="tool-concrete">
+            <div class="mat-preview" style="background: #9ca3af; height:10px;"></div>
+            <span class="tool-name">Beton</span><span class="tool-cost">190$</span>
+        </button>
+        <button class="tool-btn" onclick="selectTool('cable')" id="tool-cable">
+            <div class="mat-preview" style="background: #38bdf8; height:4px;"></div>
+            <span class="tool-name">Seil</span><span class="tool-cost">85$</span>
+        </button>
+        <button class="tool-btn" onclick="selectTool('damper')" id="tool-damper">
+            <div class="mat-preview" style="background: repeating-linear-gradient(90deg, #facc15 0 5px, #111 5px 10px);"></div>
+            <span class="tool-name">Dämpfer</span><span class="tool-cost">300$</span>
+        </button>
+        <button class="tool-btn" onclick="selectTool('pendulum')" id="tool-pendulum">
+            <div class="mat-preview" style="background: radial-gradient(circle, #fbbf24 40%, #78350f 100%); width:12px; height:12px; border-radius:50%;"></div>
+            <span class="tool-name">Pendel</span><span class="tool-cost">350$</span>
+        </button>
+        <button class="tool-btn eraser" onclick="selectTool('erase')" id="tool-erase">
+            <div style="font-size:14px;">✂️</div><span class="tool-name">Abriss</span><span class="tool-cost">Löschen</span>
+        </button>
+
+        <button class="action-btn btn-test" id="testBtn" onclick="toggleSimulation()">🚨 TESTEN</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let W = window.innerWidth, H = window.innerHeight;
+canvas.width = W; canvas.height = H;
+window.addEventListener('resize', () => { W = window.innerWidth; H = window.innerHeight; canvas.width = W; canvas.height = H; });
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playSound(type) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+    if (type === 'build') {
+        osc.frequency.setValueAtTime(240, now); osc.frequency.exponentialRampToValueAtTime(520, now + 0.07);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.07);
+    } else if (type === 'delete') {
+        osc.frequency.setValueAtTime(280, now); osc.frequency.exponentialRampToValueAtTime(100, now + 0.09);
+        gain.gain.setValueAtTime(0.15, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.09);
+    } else if (type === 'snap') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(130, now); osc.frequency.exponentialRampToValueAtTime(38, now + 0.22);
+        gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.22);
+    } else if (type === 'win') {
+        osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(659, now + 0.2);
+        gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+    }
+    osc.start(now); osc.stop(now + 0.08);
+}
+
+const MATERIALS = {
+    wood: { name: 'Rundholz', costPerPx: 0.75, maxLen: 210, stiffness: 0.45, maxTension: 0.16, maxCompression: 0.14, mass: 1.0, thickness: 9, color: '#d97706', border: '#92400e' },
+    steel: { name: 'Stahlträger', costPerPx: 1.8, maxLen: 260, stiffness: 0.85, maxTension: 0.32, maxCompression: 0.28, mass: 2.1, thickness: 11, color: '#dc2626', border: '#7f1d1d' },
+    concrete: { name: 'Stahlbeton', costPerPx: 1.35, maxLen: 190, stiffness: 0.95, maxTension: 0.08, maxCompression: 0.45, mass: 3.3, thickness: 15, color: '#9ca3af', border: '#4b5563' },
+    cable: { name: 'Stahlseil', costPerPx: 0.65, maxLen: 340, stiffness: 0.75, maxTension: 0.42, maxCompression: 0.0, mass: 0.4, thickness: 4, color: '#38bdf8', border: '#0284c7', cable: true },
+    damper: { name: 'Stoßdämpfer', costPerPx: 2.1, maxLen: 185, stiffness: 0.22, maxTension: 0.38, maxCompression: 0.38, mass: 1.5, thickness: 13, color: '#facc15', border: '#854d0e', isDamper: true },
+    pendulum: { name: 'Tilgerpendel', costPerPx: 2.4, maxLen: 160, stiffness: 0.65, maxTension: 0.45, maxCompression: 0.1, mass: 8.5, thickness: 6, color: '#fbbf24', border: '#78350f', isPendulum: true }
+};
+
+let currentLevelIdx = 0;
+let currentTool = 'wood';
+let xrayMode = false;
+let simulating = false;
+let editorMode = false;
+let simTime = 0;
+let maxPeakStress = 0;
+let slowMoTimer = 0;
+
+let nodes = [], beams = [], historyStack = [], savedNodes = [], savedBeams = [], particles = [], debris = [];
+let dragStartNode = null, pointerPos = { x: 0, y: 0 }, hoveredNode = null;
+
+// Editor-Zustand für eigene Level
+let customLevelData = {
+    title: "Eigenes Community-Level",
+    desc: "Testbaren Level aus dem In-Game-Editor.",
+    budget: 3500,
+    disaster: "both",
+    groundPolys: [
+        [{x: 0, y: 0.6}, {x: 0.3, y: 0.6}, {x: 0.35, y: 1.0}, {x: 0, y: 1.0}],
+        [{x: 0.7, y: 0.6}, {x: 1.0, y: 0.6}, {x: 1.0, y: 1.0}, {x: 0.65, y: 1.0}]
+    ],
+    anchors: [{x: 0.25, y: 0.6}, {x: 0.75, y: 0.6}],
+    vipNodes: [{x: 0.5, y: 0.5}],
+    failY: 0.78
+};
+
+const LEVELS = [
+    {
+        title: "Mission #1: Die Schlucht-Villa (Erdbeben)",
+        desc: "Bürgermeister Gierig will seine goldene Badewanne über dem Abgrund! Vierecke klappen zusammen – ziehe Dreiecke zu den grünen Fundamenten.",
+        budget: 2800, disaster: "earthquake",
+        groundPolys: [[{x:0,y:0.56},{x:0.36,y:0.56},{x:0.42,y:1.0},{x:0,y:1.0}],[{x:0.64,y:0.56},{x:1.0,y:0.56},{x:1.0,y:1.0},{x:0.58,y:1.0}]],
+        anchors: [{x:0.28,y:0.56},{x:0.35,y:0.56},{x:0.38,y:0.72},{x:0.65,y:0.56},{x:0.72,y:0.56},{x:0.62,y:0.72}],
+        vipNodes: [{x:0.46,y:0.45},{x:0.54,y:0.45}], failY: 0.78
+    },
+    {
+        title: "Mission #2: Der Sky-High-Turm (Orkan)",
+        desc: "Ein schmaler Turm im Orkan von links! Spanne links blaue Stahlseile und stütze mit Beton oder hänge ein Pendel ein.",
+        budget: 3400, disaster: "hurricane",
+        groundPolys: [[{x:0.32,y:0.78},{x:0.68,y:0.78},{x:0.75,y:1.0},{x:0.25,y:1.0}]],
+        anchors: [{x:0.36,y:0.78},{x:0.45,y:0.78},{x:0.55,y:0.78},{x:0.64,y:0.78}],
+        vipNodes: [{x:0.47,y:0.34},{x:0.53,y:0.34}], failY: 0.60
+    },
+    {
+        title: "Mission #3: Das Mega-Beben (Beides)",
+        desc: "Schlucht mit Erdbeben UND Seitenwind! Nutze Stoßdämpfer an den Fundamenten oder baue eine Hängebrücke.",
+        budget: 4800, disaster: "both",
+        groundPolys: [[{x:0,y:0.62},{x:0.26,y:0.62},{x:0.31,y:1.0},{x:0,y:1.0}],[{x:0.74,y:0.62},{x:1.0,y:0.62},{x:1.0,y:1.0},{x:0.69,y:1.0}]],
+        anchors: [{x:0.17,y:0.62},{x:0.25,y:0.62},{x:0.75,y:0.62},{x:0.83,y:0.62}],
+        vipNodes: [{x:0.43,y:0.52},{x:0.50,y:0.52},{x:0.57,y:0.52}], failY: 0.76
+    }
+];
+
+function getCurrentLevelData() {
+    return editorMode ? customLevelData : LEVELS[currentLevelIdx];
+}
+
+function createNode(x, y, fixed = false, vip = false, heavy = false) {
+    return { x, y, baseX: x, baseY: y, vx: 0, vy: 0, fixed, vip, heavyMass: heavy, mass: vip ? 6.2 : (heavy ? 8.5 : 1.2) };
+}
+
+function createBeam(n1, n2, matKey, ind = false) {
+    const len = Math.hypot(n2.x - n1.x, n2.y - n1.y);
+    return { n1, n2, mat: MATERIALS[matKey], matKey, restLen: len, stress: 0, strain: 0, broken: false, indestructible: ind, cost: ind ? 0 : Math.round(len * MATERIALS[matKey].costPerPx) };
+}
+
+function loadLevel(idx) {
+    currentLevelIdx = idx; editorMode = false;
+    document.getElementById('editorBtn').classList.remove('active');
+    document.getElementById('levelSelect').value = idx;
+    setupLevelState(LEVELS[idx]);
+}
+
+function setupLevelState(lvl) {
+    document.getElementById('briefingTitle').innerText = lvl.title;
+    document.getElementById('briefingText').innerText = lvl.desc;
+    document.getElementById('result-modal').classList.remove('show');
+    simulating = false; updateTestBtn();
+
+    nodes = []; beams = []; historyStack = []; particles = []; debris = [];
+    lvl.anchors.forEach(a => nodes.push(createNode(a.x * W, a.y * H, true, false)));
+
+    let vipList = [];
+    lvl.vipNodes.forEach(v => {
+        const n = createNode(v.x * W, v.y * H, false, true);
+        nodes.push(n); vipList.push(n);
+    });
+    for (let i = 0; i < vipList.length - 1; i++) {
+        beams.push(createBeam(vipList[i], vipList[i+1], 'steel', true));
+    }
+    updateHighscoreBadge(); updateStats();
+}
+
+function toggleEditorMode() {
+    editorMode = !editorMode;
+    const btn = document.getElementById('editorBtn');
+    btn.classList.toggle('active', editorMode);
+    if (editorMode) {
+        document.getElementById('briefingTitle').innerText = "🛠️ Community-Level Editor";
+        document.getElementById('briefingText').innerText = "Platziere Fundamente (Grün) und VIP-Ziele (Gold) per Klick. Teste dein Level sofort mit dem roten Test-Button!";
+        setupLevelState(customLevelData);
+    } else {
+        loadLevel(0);
+    }
+}
+
+function shareCustomLevel() {
+    const jsonStr = JSON.stringify(customLevelData);
+    const encoded = btoa(encodeURIComponent(jsonStr));
+    const url = window.location.origin + window.location.pathname + "#level=" + encoded;
+    navigator.clipboard.writeText(url).then(() => {
+        alert("Level-Link in die Zwischenablage kopiert! Teile ihn mit Freunden.");
+    });
+}
+
+// URL beim Start auf geteilten Level prüfen
+window.addEventListener('DOMContentLoaded', () => {
+    if (window.location.hash.includes("level=")) {
+        try {
+            const hash = window.location.hash.split("level=")[1];
+            const decoded = decodeURIComponent(atob(hash));
+            customLevelData = JSON.parse(decoded);
+            editorMode = true;
+            document.getElementById('editorBtn').classList.add('active');
+            setupLevelState(customLevelData);
+        } catch(e) { console.error(e); }
+    }
+});
+
+function saveHistory() {
+    historyStack.push({
+        nodes: nodes.map(n => ({ x: n.baseX, y: n.baseY, fixed: n.fixed, vip: n.vip, heavyMass: n.heavyMass })),
+        beams: beams.map(b => ({ n1: nodes.indexOf(b.n1), n2: nodes.indexOf(b.n2), matKey: b.matKey, ind: b.indestructible }))
+    });
+    if (historyStack.length > 20) historyStack.shift();
+}
+
+function undoLast() {
+    if (simulating || historyStack.length === 0) return;
+    const state = historyStack.pop();
+    nodes = state.nodes.map(n => createNode(n.x, n.y, n.fixed, n.vip, n.heavyMass));
+    beams = state.beams.map(b => createBeam(nodes[b.n1], nodes[b.n2], b.matKey, b.ind));
+    playSound('delete'); updateStats();
+}
+
+function resetBuild() {
+    if (simulating) stopSimulation();
+    setupLevelState(getCurrentLevelData());
+    playSound('delete');
+}
+
+function selectTool(toolKey) {
+    currentTool = toolKey;
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tool-' + toolKey).classList.add('active');
+}
+
+function toggleXray() {
+    xrayMode = !xrayMode;
+    document.getElementById('xrayBtn').classList.toggle('active', xrayMode);
+}
+
+function getTotalCost() { return beams.reduce((sum, b) => sum + b.cost, 0); }
+
+function updateHighscoreBadge() {
+    if (editorMode) {
+        document.getElementById('highscoreDisplay').innerText = `🛠️ Editor-Modus (Unbegrenzt)`;
+        return;
+    }
+    const saved = localStorage.getItem('bb_highscore_' + currentLevelIdx);
+    document.getElementById('highscoreDisplay').innerText = saved ? `🏆 Dein Bestwert: ${saved} $` : `🏆 Bestwert: Noch ungelöst`;
+}
+
+function updateStats() {
+    const lvl = getCurrentLevelData();
+    const cost = getTotalCost();
+    const budgetEl = document.getElementById('budgetDisplay');
+    budgetEl.innerText = `${cost} $ / ${lvl.budget} $`;
+    budgetEl.className = 'stat-value ' + (cost > lvl.budget ? 'over' : (cost > lvl.budget * 0.85 ? 'warn' : 'ok'));
+
+    const stressEl = document.getElementById('stressDisplay');
+    const pct = Math.min(100, Math.round(maxPeakStress * 100));
+    stressEl.innerText = `${pct} %`;
+    stressEl.style.color = pct > 80 ? '#ef4444' : (pct > 50 ? '#f59e0b' : '#10b981');
+}
+
+function findNearestNode(x, y, radius = 28) {
+    let best = null, minDist = radius;
+    for (const n of nodes) {
+        const d = Math.hypot(n.x - x, n.y - y);
+        if (d < minDist) { minDist = d; best = n; }
+    }
+    return best;
+}
+
+canvas.addEventListener('pointermove', (e) => {
+    pointerPos.x = e.clientX; pointerPos.y = e.clientY;
+    hoveredNode = findNearestNode(pointerPos.x, pointerPos.y, 28);
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+    if (simulating) return;
+    pointerPos.x = e.clientX; pointerPos.y = e.clientY;
+    hoveredNode = findNearestNode(pointerPos.x, pointerPos.y, 28);
+
+    if (editorMode && e.button === 0 && !hoveredNode) {
+        // Im Editor: Klick platziert neuen Anker (Fundament) oder VIP-Ziel
+        nodes.push(createNode(pointerPos.x, pointerPos.y, true, false));
+        return;
+    }
+
+    if (e.button === 2 || currentTool === 'erase') {
+        deleteAt(pointerPos.x, pointerPos.y);
+        return;
+    }
+
+    if (hoveredNode) dragStartNode = hoveredNode;
+});
+
+canvas.addEventListener('pointerup', (e) => {
+    if (simulating || editorMode || !dragStartNode || currentTool === 'erase') { dragStartNode = null; return; }
+
+    const mat = MATERIALS[currentTool];
+    let dx = pointerPos.x - dragStartNode.x, dy = pointerPos.y - dragStartNode.y;
+    let dist = Math.hypot(dx, dy);
+
+    if (dist > 24) {
+        saveHistory();
+        let tx = pointerPos.x, ty = pointerPos.y;
+        if (dist > mat.maxLen) {
+            const a = Math.atan2(dy, dx);
+            tx = dragStartNode.x + Math.cos(a) * mat.maxLen;
+            ty = dragStartNode.y + Math.sin(a) * mat.maxLen;
+        }
+        let endNode = findNearestNode(tx, ty, 28);
+        if (!endNode) {
+            endNode = createNode(tx, ty, false, false, mat.isPendulum);
+            nodes.push(endNode);
+        }
+        if (endNode !== dragStartNode) {
+            const exists = beams.some(b => (b.n1 === dragStartNode && b.n2 === endNode) || (b.n1 === endNode && b.n2 === dragStartNode));
+            if (!exists) {
+                beams.push(createBeam(dragStartNode, endNode, currentTool));
+                playSound('build');
+                updateStats();
+            }
+        }
+    }
+    dragStartNode = null;
+});
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function deleteAt(mx, my) {
+    for (let i = beams.length - 1; i >= 0; i--) {
+        const b = beams[i];
+        if (b.indestructible && !editorMode) continue;
+        if (distToSegment({x: mx, y: my}, b.n1, b.n2) < 16) {
+            saveHistory();
+            beams.splice(i, 1);
+            nodes = nodes.filter(n => n.fixed || n.vip || beams.some(bm => bm.n1 === n || bm.n2 === n));
+            playSound('delete'); updateStats(); return;
+        }
+    }
+}
+
+function distToSegment(p, v, w) {
+    const l2 = (v.x - w.x)**2 + (v.y - w.y)**2;
+    if (l2 === 0) return Math.hypot(p.x - v.x, p.y - v.y);
+    let t = ((p.x - v.x) * (w.x - v.x) + (p.y - v.y) * (w.y - v.y)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p.x - (v.x + t * (w.x - v.x)), p.y - (v.y + t * (w.y - v.y)));
+}
+
+function toggleSimulation() {
+    if (simulating) stopSimulation(); else startSimulation();
+}
+
+function startSimulation() {
+    savedNodes = nodes.map(n => ({ ...n }));
+    savedBeams = beams.map(b => ({ n1Idx: nodes.indexOf(b.n1), n2Idx: nodes.indexOf(b.n2), matKey: b.matKey, indestructible: b.indestructible }));
+    simulating = true; simTime = 0; maxPeakStress = 0; slowMoTimer = 0;
+    document.getElementById('result-modal').classList.remove('show');
+    updateTestBtn();
+}
+
+function stopSimulation() {
+    simulating = false; slowMoTimer = 0;
+    document.getElementById('result-modal').classList.remove('show');
+    nodes = savedNodes.map(n => createNode(n.baseX, n.baseY, n.fixed, n.vip, n.heavyMass));
+    beams = savedBeams.map(sb => createBeam(nodes[sb.n1Idx], nodes[sb.n2Idx], sb.matKey, sb.indestructible));
+    particles = []; debris = [];
+    document.getElementById('timerDisplay').innerText = "12.0s";
+    updateTestBtn(); updateStats();
+}
+
+function updateTestBtn() {
+    const btn = document.getElementById('testBtn');
+    btn.innerHTML = simulating ? "⏹️ STOPP" : "🚨 TESTEN";
+    btn.style.background = simulating ? "#475569" : "linear-gradient(135deg, #ef4444, #dc2626)";
+}
+
+function stepPhysics() {
+    const lvl = getCurrentLevelData();
+    const timeScale = slowMoTimer > 0 ? 0.25 : 1.0;
+    if (slowMoTimer > 0) slowMoTimer--;
+    simTime += (1 / 60) * timeScale;
+    const remaining = Math.max(0, 12.0 - simTime);
+    document.getElementById('timerDisplay').innerText = remaining.toFixed(1) + "s";
+
+    let quakeX = 0, quakeY = 0, windX = 0;
+    if (lvl.disaster === 'earthquake' || lvl.disaster === 'both') {
+        const ramp = Math.min(1, simTime / 2.2);
+        quakeX = Math.sin(simTime * 19) * 17 * ramp; quakeY = Math.cos(simTime * 24) * 8 * ramp;
+    }
+    if (lvl.disaster === 'hurricane' || lvl.disaster === 'both') {
+        windX = 0.22 * (0.6 + 0.4 * Math.sin(simTime * 4.5));
+    }
+
+    const subSteps = 8, dt = timeScale / subSteps;
+    for (let s = 0; s < subSteps; s++) {
+        for (const n of nodes) {
+            if (n.fixed) {
+                const px = n.x, py = n.y;
+                n.x = n.baseX + quakeX; n.y = n.baseY + quakeY;
+                n.vx = n.x - px; n.vy = n.y - py;
+            } else {
+                n.vy += 0.28 * dt; n.vx += (windX / n.mass) * dt;
+                n.vx *= Math.pow(0.992, dt); n.vy *= Math.pow(0.992, dt);
+                n.x += n.vx * dt; n.y += n.vy * dt;
+            }
+        }
+        for (const b of beams) {
+            if (b.broken) continue;
+            const dx = b.n2.x - b.n1.x, dy = b.n2.y - b.n1.y;
+            const dist = Math.hypot(dx, dy) || 0.0001, diff = dist - b.restLen, strain = diff / b.restLen;
+            b.strain = strain;
+            if (b.mat.cable && strain < 0) { b.stress = 0; continue; }
+            b.stress = strain >= 0 ? (strain / b.mat.maxTension) : (Math.abs(strain) / b.mat.maxCompression);
+            if (!b.indestructible && b.stress > maxPeakStress) maxPeakStress = b.stress;
+
+            if (!b.indestructible && b.stress >= 1.0) {
+                b.broken = true; playSound('snap');
+                const mx = (b.n1.x + b.n2.x) / 2, my = (b.n1.y + b.n2.y) / 2;
+                if (slowMoTimer === 0) slowMoTimer = 40;
+                debris.push({ x: mx, y: my, vx: (Math.random()-0.5)*5, vy: -2, angle: Math.atan2(dy, dx), vAngle: 0.12, len: b.restLen*0.45, color: b.mat.color, thickness: b.mat.thickness });
+                continue;
+            }
+            const nx = dx / dist, ny = dy / dist;
+            const rvx = b.n2.vx - b.n1.vx, rvy = b.n2.vy - b.n1.vy;
+            const damp = (rvx * nx + rvy * ny) * (b.mat.isDamper ? 0.36 : 0.08);
+            const force = (diff * b.mat.stiffness) + damp;
+            if (!b.n1.fixed) { b.n1.vx += (nx * force / b.n1.mass) * dt; b.n1.vy += (ny * force / b.n1.mass) * dt; }
+            if (!b.n2.fixed) { b.n2.vx -= (nx * force / b.n2.mass) * dt; b.n2.vy -= (ny * force / b.n2.mass) * dt; }
+        }
+    }
+    updateStats();
+
+    const failLine = lvl.failY * H;
+    if (nodes.some(n => n.vip && n.y > failLine)) {
+        endSimulation(false, "EINGESTÜRZT! Die Plattform ist in die Tiefe gestürzt."); return;
+    }
+    if (remaining <= 0) {
+        playSound('win');
+        endSimulation(true, "Meisterleistung! Das Gebäude hat die Katastrophe überstanden.");
+    }
+}
+
+function endSimulation(won, msg) {
+    simulating = false; updateTestBtn();
+    const modal = document.getElementById('result-modal');
+    document.getElementById('modalTitle').innerText = won ? "🏆 BESTANDEN!" : "💥 EINGESTÜRZT!";
+    document.getElementById('modalTitle').style.color = won ? "#10b981" : "#ef4444";
+    document.getElementById('modalSub').innerText = msg;
+    modal.classList.add('show');
+}
+
+function nextLevel() { loadLevel((currentLevelIdx + 1) % LEVELS.length); }
+
+function getHeatmapColor(s) {
+    s = Math.min(1, Math.max(0, s));
+    return s < 0.5 ? `rgb(${Math.round(16+s*2*229)},${Math.round(185-s*2*27)},129)` : `rgb(245,${Math.round(158*(1-(s-0.5)*2))},68)`;
+}
+
+function draw() {
+    ctx.fillStyle = xrayMode ? '#091526' : (simulating ? '#1a162b' : '#0f172a');
+    ctx.fillRect(0, 0, W, H);
+
+    const lvl = getCurrentLevelData();
+    const failY = lvl.failY * H;
+    ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, failY); ctx.lineTo(W, failY); ctx.stroke(); ctx.setLineDash([]);
+
+    const qX = simulating && nodes[0] ? (nodes[0].x - nodes[0].baseX) : 0;
+    const qY = simulating && nodes[0] ? (nodes[0].y - nodes[0].baseY) : 0;
+
+    lvl.groundPolys.forEach(poly => {
+        ctx.beginPath();
+        poly.forEach((pt, i) => { const px = pt.x * W + qX, py = pt.y * H + qY; if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py); });
+        ctx.closePath(); ctx.fillStyle = '#334155'; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = '#10b981'; ctx.stroke();
+    });
+
+    for (const b of beams) {
+        if (b.broken) continue;
+        const x1 = b.n1.x, y1 = b.n1.y, x2 = b.n2.x, y2 = b.n2.y;
+        const midX = (x1+x2)/2, midY = (y1+y2)/2, dx = x2-x1, dy = y2-y1, len = Math.hypot(dx,dy)||1;
+        const nx = -dy/len, ny = dx/len;
+        let curve = (b.mat.cable && b.strain < 0) ? Math.min(40, Math.abs(b.strain)*180) : ((b.strain < 0 && !b.indestructible) ? b.stress*20 : 0);
+        
+        ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x1, y1);
+        ctx.quadraticCurveTo(midX + nx*curve, midY + ny*curve, x2, y2);
+
+        if (xrayMode) {
+            ctx.strokeStyle = getHeatmapColor(b.stress); ctx.lineWidth = b.mat.thickness; ctx.stroke();
+        } else {
+            ctx.strokeStyle = b.indestructible ? '#fbbf24' : b.mat.border; ctx.lineWidth = b.mat.thickness + 4; ctx.stroke();
+            ctx.strokeStyle = b.indestructible ? '#f59e0b' : (b.stress > 0.75 ? '#ef4444' : b.mat.color); ctx.lineWidth = b.mat.thickness; ctx.stroke();
+        }
+    }
+
+    if (!simulating && dragStartNode && currentTool !== 'erase') {
+        const mat = MATERIALS[currentTool];
+        let tx = pointerPos.x, ty = pointerPos.y;
+        let dist = Math.hypot(tx - dragStartNode.x, ty - dragStartNode.y);
+        if (dist > mat.maxLen) {
+            const a = Math.atan2(ty - dragStartNode.y, tx - dragStartNode.x);
+            tx = dragStartNode.x + Math.cos(a) * mat.maxLen; ty = dragStartNode.y + Math.sin(a) * mat.maxLen;
+        }
+        ctx.setLineDash([6,6]); ctx.strokeStyle = mat.color; ctx.lineWidth = mat.thickness;
+        ctx.beginPath(); ctx.moveTo(dragStartNode.x, dragStartNode.y); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+    }
+
+    for (const n of nodes) {
+        if (n.vip) {
+            ctx.fillStyle = '#fbbf24'; ctx.strokeStyle = '#92400e'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(n.x, n.y - 12, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(n.x, n.y, n.fixed ? 9 : 6.5, 0, Math.PI * 2);
+        ctx.fillStyle = n.fixed ? '#10b981' : (n.vip ? '#f59e0b' : '#e2e8f0');
+        ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#0f172a'; ctx.stroke();
+    }
+}
+
+function loop() { if (simulating) stepPhysics(); draw(); requestAnimationFrame(loop); }
+loadLevel(0); loop();
+</script>
+</body>
+</html>

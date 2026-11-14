@@ -1,0 +1,7 @@
+# Debug / probe scripts (temp files)
+bb_probe.cjs
+bb_*probe*.cjs
+
+# OS / editor
+.DS_Store
+*.log

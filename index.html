@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Brücken &amp; Beben</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f172a'/%3E%3Cpath d='M8 40h48' stroke='%23f59e0b' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M12 40c6-16 34-16 40 0' fill='none' stroke='%2338bdf8' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M20 40v10M44 40v10' stroke='%2394a3b8' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+    <link rel="stylesheet" href="css/style.css?v=0.4.0">
+</head>
+<body>
+
+<div id="app">
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="top-bar">
+        <div class="hud-card">
+            <div>
+                <div class="stat-label" id="modeLabel">Mission</div>
+                <select id="levelSelect" title="Level wählen"></select>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Budget</span>
+                <span class="stat-value ok" id="budgetDisplay">0 $ / 2.800 $</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Spitzenlast</span>
+                <span class="stat-value" id="stressDisplay">0 %</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Zeit</span>
+                <span class="stat-value" id="timerDisplay">12.0s</span>
+            </div>
+        </div>
+
+        <div class="hud-card">
+            <button class="action-btn btn-xray" id="xrayBtn" type="button" title="Röntgen (X)">🔍 Röntgen</button>
+            <button class="action-btn btn-editor" id="editorBtn" type="button" title="Werkstatt (E)">🛠️ Werkstatt</button>
+            <button class="action-btn btn-util" id="undoBtn" type="button" title="Undo (Strg+Z)">↩️</button>
+            <button class="action-btn btn-util" id="resetBtn" type="button" title="Zurücksetzen (R)">🔄</button>
+            <button class="action-btn btn-util" id="muteBtn" type="button" title="Ton an/aus">🔊</button>
+            <button class="action-btn btn-util" id="achBtn" type="button" title="Erfolge">🏅</button>
+            <button class="action-btn btn-util" id="helpBtn" type="button" title="Hilfe (H)">?</button>
+        </div>
+    </div>
+
+    <div id="briefing-box">
+        <strong id="briefingTitle">Mission #1: Die Schlucht-Villa</strong>
+        <span id="briefingText">Baue ein stabiles Fachwerk zu den Fundamenten!</span>
+        <div id="tutorialHint" class="tutorial-hint" hidden></div>
+        <div id="highscoreDisplay" class="highscore-tag">🏆 Bestwert: Noch ungelöst</div>
+    </div>
+
+    <!-- Werkstatt -->
+    <aside id="editorPanel" class="editor-panel" hidden>
+        <h2>🛠️ Werkstatt</h2>
+
+        <label class="field">
+            <span>Titel</span>
+            <input id="edTitle" type="text" maxlength="120" placeholder="Name des Levels">
+        </label>
+
+        <div class="field-row">
+            <label class="field">
+                <span>Budget ($)</span>
+                <input id="edBudget" type="number" min="100" max="100000" step="100">
+            </label>
+            <label class="field">
+                <span>Dauer (s)</span>
+                <input id="edDuration" type="number" min="3" max="60" step="1">
+            </label>
+        </div>
+
+        <label class="field">
+            <span>Katastrophe</span>
+            <select id="edDisaster">
+                <option value="none">Keine</option>
+                <option value="earthquake">Erdbeben</option>
+                <option value="hurricane">Orkan</option>
+                <option value="both">Beides</option>
+            </select>
+        </label>
+
+        <div class="field">
+            <span>Platzieren</span>
+            <div class="segmented">
+                <button type="button" id="edToolAnchor" data-edit-tool="anchor">Fundament</button>
+                <button type="button" id="edToolTarget" data-edit-tool="target">Ziel</button>
+                <button type="button" id="edToolErase" data-edit-tool="erase">Löschen</button>
+            </div>
+        </div>
+
+        <p class="hint" id="editorHint">Klick auf die Fläche setzt ein Fundament. Ziel setzen: Klick auf die Fläche. Löschen: Element anklicken.</p>
+
+        <div class="panel-actions">
+            <button class="action-btn btn-util" id="edExportBtn" type="button">💾 Exportieren</button>
+            <button class="action-btn btn-util" id="edImportBtn" type="button">📂 Importieren</button>
+        </div>
+        <input id="edFileInput" type="file" accept=".bridge,.json,application/json" hidden>
+
+        <p class="hint small">Eigene Level werden in dieser App gespeichert und als <code>.bridge</code>-Datei weitergegeben. Alles bleibt lokal.</p>
+    </aside>
+
+    <div id="result-modal">
+        <div class="modal-title" id="modalTitle">BAUWERK HÄLT!</div>
+        <div class="stars" id="modalStars"></div>
+        <div class="modal-sub" id="modalSub">Du hast das Beben überstanden!</div>
+        <div class="modal-stats" id="modalStats"></div>
+        <div class="modal-actions">
+            <button class="action-btn btn-util" id="modalRebuildBtn" type="button">🔨 Umbauen</button>
+            <button class="action-btn btn-test" id="modalNextBtn" type="button">➡️ Nächstes</button>
+        </div>
+    </div>
+
+    <div id="helpOverlay" class="overlay" hidden>
+        <div class="overlay-card">
+            <h2>So funktioniert's</h2>
+            <p>Ziehe mit gedrückter Maustaste von einem Knoten zum nächsten, um eine Strebe zu bauen. Grüne Punkte sind Fundamente, goldene Punkte sind die Ziele, die oben bleiben müssen.</p>
+            <p>Beim Test fahren <strong>Fahrzeuge</strong> über die Brücke. Stürzt eines ab, ist der Test verloren – die Brücke muss sie tragen.</p>
+            <h3>Tastatur</h3>
+            <ul class="keys">
+                <li><kbd>1</kbd>–<kbd>6</kbd> Material wählen</li>
+                <li><kbd>Leertaste</kbd> Test starten/stoppen</li>
+                <li><kbd>X</kbd> Röntgen-Ansicht</li>
+                <li><kbd>Strg</kbd>+<kbd>Z</kbd> Undo</li>
+                <li><kbd>R</kbd> Zurücksetzen</li>
+                <li><kbd>E</kbd> Werkstatt</li>
+                <li><kbd>H</kbd> diese Hilfe</li>
+            </ul>
+            <h3>Materialien</h3>
+            <ul class="legend" id="helpLegend"></ul>
+            <p class="hint">Dreiecke sind stabil, Vierecke klappen zusammen. Seile tragen nur Zug, Beton fast nur Druck.</p>
+            <div class="modal-actions">
+                <button class="action-btn btn-util" id="helpCloseBtn" type="button">Verstanden</button>
+            </div>
+            <label class="help-option"><input type="checkbox" id="tutorialToggle"> Bau-Tipps in Level 1 anzeigen</label>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Erfolge -->
+    <div id="achOverlay" class="overlay" hidden>
+        <div class="overlay-card">
+            <h2>🏅 Erfolge &amp; Statistik</h2>
+            <p id="achStats" class="ach-stats"></p>
+            <ul class="ach-list" id="achList"></ul>
+            <div class="modal-actions">
+                <button class="action-btn btn-util" id="achCloseBtn" type="button">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Toolbar -->
+    <div class="bottom-bar" id="toolBar"></div>
+</div>
+
+<script src="js/config.js?v=0.4.0"></script>
+<script src="js/storage.js?v=0.4.0"></script>
+<script src="js/audio.js?v=0.4.0"></script>
+<script src="js/levels.js?v=0.4.0"></script>
+<script src="js/levelformat.js?v=0.4.0"></script>
+<script src="js/physics.js?v=0.4.0"></script>
+<script src="js/render.js?v=0.4.0"></script>
+<script src="js/ui.js?v=0.4.0"></script>
+<script src="js/achievements.js?v=0.4.0"></script>
+<script src="js/tutorial.js?v=0.4.0"></script>
+<script src="js/editor.js?v=0.4.0"></script>
+<script src="js/game.js?v=0.4.0"></script>
+</body>
+</html>
